@@ -7,7 +7,9 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import skimage.transform
 import argparse
-from scipy.misc import imread, imresize
+# from scipy.misc import imread, imresize
+from imageio import imread
+from skimage.transform import resize
 from PIL import Image
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -33,7 +35,7 @@ def caption_image_beam_search(encoder, decoder, image_path, word_map, beam_size=
     if len(img.shape) == 2:
         img = img[:, :, np.newaxis]
         img = np.concatenate([img, img, img], axis=2)
-    img = imresize(img, (256, 256))
+    img = resize(img, (256, 256))
     img = img.transpose(2, 0, 1)
     img = img / 255.
     img = torch.FloatTensor(img).to(device)
@@ -104,7 +106,8 @@ def caption_image_beam_search(encoder, decoder, image_path, word_map, beam_size=
             top_k_scores, top_k_words = scores.view(-1).topk(k, 0, True, True)  # (s)
 
         # Convert unrolled indices to actual indices of scores
-        prev_word_inds = top_k_words / vocab_size  # (s)
+        prev_word_inds = torch.floor_divide(top_k_words, vocab_size)  # (s)
+        print('hello',prev_word_inds)
         next_word_inds = top_k_words % vocab_size  # (s)
 
         # Add new words to sequences, alphas
@@ -161,9 +164,10 @@ def visualize_att(image_path, seq, alphas, rev_word_map, smooth=True):
     """
     image = Image.open(image_path)
     image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
+    plt.imshow(image)
 
     words = [rev_word_map[ind] for ind in seq]
-
+    print('a', words)
     for t in range(len(words)):
         if t > 50:
             break
@@ -184,6 +188,33 @@ def visualize_att(image_path, seq, alphas, rev_word_map, smooth=True):
         plt.axis('off')
     plt.show()
 
+
+def getCaptions(img = '/data/dataset/flickr-8k/Flickr_Data/Flickr_Data/Images/1204996216_71d7519d9a.jpg'):
+    model = 'BEST_checkpoint_flickr8k_5_cap_per_img_5_min_word_freq.pth.tar'
+    smooth = True
+    beam_size = 5
+    word_map_file = '../output/WORDMAP_flickr8k_5_cap_per_img_5_min_word_freq.json'
+    
+    checkpoint = torch.load(model, map_location=str(device))
+    decoder = checkpoint['decoder']
+    decoder = decoder.to(device)
+    decoder.eval()
+    encoder = checkpoint['encoder']
+    encoder = encoder.to(device)
+    encoder.eval()
+
+    # Load word map (word2ix)
+    with open(word_map_file, 'r') as j:
+        word_map = json.load(j)
+    rev_word_map = {v: k for k, v in word_map.items()}  # ix2word
+
+    # Encode, decode with attention and beam search
+    seq, alphas = caption_image_beam_search(encoder, decoder, img, word_map, beam_size)
+    alphas = torch.FloatTensor(alphas)
+#     print(seq, alphas)
+
+    # Visualize caption and attention of best sequence
+    visualize_att(img, seq, alphas, rev_word_map, smooth)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Show, Attend, and Tell - Tutorial - Generate Caption')
@@ -213,6 +244,7 @@ if __name__ == '__main__':
     # Encode, decode with attention and beam search
     seq, alphas = caption_image_beam_search(encoder, decoder, args.img, word_map, args.beam_size)
     alphas = torch.FloatTensor(alphas)
+#     print(seq, alphas)
 
     # Visualize caption and attention of best sequence
     visualize_att(args.img, seq, alphas, rev_word_map, args.smooth)

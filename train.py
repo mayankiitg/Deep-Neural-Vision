@@ -24,16 +24,16 @@ cudnn.benchmark = True  # set to true only if inputs to model are fixed size; ot
 
 # Training parameters
 start_epoch = 0
-epochs = 120  # number of epochs to train for (if early stopping is not triggered)
+epochs = 2  # number of epochs to train for (if early stopping is not triggered)
 epochs_since_improvement = 0  # keeps track of number of epochs since there's been an improvement in validation BLEU
-batch_size = 32
+batch_size = 80
 workers = 1  # for data-loading; right now, only 1 works with h5py
 encoder_lr = 1e-4  # learning rate for encoder if fine-tuning
 decoder_lr = 4e-4  # learning rate for decoder
 grad_clip = 5.  # clip gradients at an absolute value of
 alpha_c = 1.  # regularization parameter for 'doubly stochastic attention', as in the paper
 best_bleu4 = 0.  # BLEU-4 score right now
-print_freq = 1  # print training/validation stats every __ batches
+print_freq = 10  # print training/validation stats every __ batches
 fine_tune_encoder = False  # fine-tune encoder?
 checkpoint = None  # path to checkpoint, None if none
 
@@ -267,8 +267,8 @@ def validate(val_loader, encoder, decoder, criterion):
             # Remove timesteps that we didn't decode at, or are pads
             # pack_padded_sequence is an easy trick to do this
             scores_copy = scores.clone()
-            scores, _ = pack_padded_sequence(scores, decode_lengths, batch_first=True)
-            targets, _ = pack_padded_sequence(targets, decode_lengths, batch_first=True)
+            scores = pack_padded_sequence(scores, decode_lengths, batch_first=True).data
+            targets = pack_padded_sequence(targets, decode_lengths, batch_first=True).data
 
             # Calculate loss
             loss = criterion(scores, targets)
