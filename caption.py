@@ -9,8 +9,14 @@ import skimage.transform
 import argparse
 # from scipy.misc import imread, imresize
 from imageio import imread
+import skimage
 from skimage.transform import resize
+import skimage
 from PIL import Image
+fig_size = plt.rcParams["figure.figsize"]
+fig_size[0] = 15
+fig_size[1] = 10
+plt.rcParams["figure.figsize"] = fig_size
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -32,17 +38,19 @@ def caption_image_beam_search(encoder, decoder, image_path, word_map, beam_size=
 
     # Read image and process
     img = imread(image_path)
+    print(img.shape)
     if len(img.shape) == 2:
         img = img[:, :, np.newaxis]
         img = np.concatenate([img, img, img], axis=2)
-    img = resize(img, (256, 256))
+    img = resize(img, (256, 256), preserve_range=True) # preserves range 0-255, but returns float now..
     img = img.transpose(2, 0, 1)
-    img = img / 255.
+    img = img/255.
     img = torch.FloatTensor(img).to(device)
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
     transform = transforms.Compose([normalize])
     image = transform(img)  # (3, 256, 256)
+    # plt.imshow(image.cpu().transpose(1,2,0))
 
     # Encode
     image = image.unsqueeze(0)  # (1, 3, 256, 256)
@@ -53,7 +61,8 @@ def caption_image_beam_search(encoder, decoder, image_path, word_map, beam_size=
     # Flatten encoding
     encoder_out = encoder_out.view(1, -1, encoder_dim)  # (1, num_pixels, encoder_dim)
     num_pixels = encoder_out.size(1)
-
+    
+    print('Encoder Output', encoder_out)
     # We'll treat the problem as having a batch size of k
     encoder_out = encoder_out.expand(k, num_pixels, encoder_dim)  # (k, num_pixels, encoder_dim)
 
@@ -107,9 +116,11 @@ def caption_image_beam_search(encoder, decoder, image_path, word_map, beam_size=
 
         # Convert unrolled indices to actual indices of scores
         prev_word_inds = torch.floor_divide(top_k_words, vocab_size)  # (s)
-        print('hello',prev_word_inds)
+        
+        #print('hello',prev_word_inds)
         next_word_inds = top_k_words % vocab_size  # (s)
-
+#         print('topkwords, vocab_size: {}, {}, {}'.format(top_k_words, vocab_size, next_word_inds))
+        
         # Add new words to sequences, alphas
         seqs = torch.cat([seqs[prev_word_inds], next_word_inds.unsqueeze(1)], dim=1)  # (s, step+1)
         seqs_alpha = torch.cat([seqs_alpha[prev_word_inds], alpha[prev_word_inds].unsqueeze(1)],
@@ -163,11 +174,12 @@ def visualize_att(image_path, seq, alphas, rev_word_map, smooth=True):
     :param smooth: smooth weights?
     """
     image = Image.open(image_path)
-    image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
+    # image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
+    image = image.resize([512, 512], Image.LANCZOS)
     plt.imshow(image)
 
     words = [rev_word_map[ind] for ind in seq]
-    print('a', words)
+    # print('a', words)
     for t in range(len(words)):
         if t > 50:
             break
@@ -179,7 +191,8 @@ def visualize_att(image_path, seq, alphas, rev_word_map, smooth=True):
         if smooth:
             alpha = skimage.transform.pyramid_expand(current_alpha.numpy(), upscale=24, sigma=8)
         else:
-            alpha = skimage.transform.resize(current_alpha.numpy(), [14 * 24, 14 * 24])
+            # alpha = skimage.transform.resize(current_alpha.numpy(), [14 * 24, 14 * 24])
+            alpha = skimage.transform.resize(current_alpha.numpy(), [512, 512])
         if t == 0:
             plt.imshow(alpha, alpha=0)
         else:
@@ -189,11 +202,10 @@ def visualize_att(image_path, seq, alphas, rev_word_map, smooth=True):
     plt.show()
 
 
-def getCaptions(img = '/data/dataset/flickr-8k/Flickr_Data/Flickr_Data/Images/1204996216_71d7519d9a.jpg'):
-    model = 'BEST_checkpoint_flickr8k_5_cap_per_img_5_min_word_freq.pth.tar'
-    smooth = True
-    beam_size = 5
-    word_map_file = '../output/WORDMAP_flickr8k_5_cap_per_img_5_min_word_freq.json'
+def getCaptions(img = '/data/dataset/flickr-8k/Flickr_Data/Flickr_Data/Images/1204996216_71d7519d9a.jpg', word_map_file = '../output/WORDMAP_flickr8k_5_cap_per_img_5_min_word_freq.json', model = 'BEST_checkpoint_flickr8k_5_cap_per_img_5_min_word_freq.pth.tar'):
+    
+    smooth = False
+    beam_size = 3
     
     checkpoint = torch.load(model, map_location=str(device))
     decoder = checkpoint['decoder']
@@ -210,6 +222,7 @@ def getCaptions(img = '/data/dataset/flickr-8k/Flickr_Data/Flickr_Data/Images/12
 
     # Encode, decode with attention and beam search
     seq, alphas = caption_image_beam_search(encoder, decoder, img, word_map, beam_size)
+    print(seq)
     alphas = torch.FloatTensor(alphas)
 #     print(seq, alphas)
 

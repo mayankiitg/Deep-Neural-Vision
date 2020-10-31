@@ -37,13 +37,20 @@ class CaptionDataset(Dataset):
 
         # PyTorch transformation pipeline for the image (normalizing, etc.)
         self.transform = transform
-
+        
         # Total number of datapoints
-        self.dataset_size = len(self.captions)
+        if self.split in {'VAL', 'TEST'}:
+            self.dataset_size = len(self.imgs)
+        else:
+            self.dataset_size = len(self.captions)
 
     def __getitem__(self, i):
         # Remember, the Nth caption corresponds to the (N // captions_per_image)th image
+        if self.split in {'VAL', 'TEST'}:
+            i = i*self.cpi
+            
         img = torch.FloatTensor(self.imgs[i // self.cpi] / 255.)
+        
         if self.transform is not None:
             img = self.transform(img)
 
@@ -60,4 +67,5 @@ class CaptionDataset(Dataset):
             return img, caption, caplen, all_captions
 
     def __len__(self):
+        
         return self.dataset_size

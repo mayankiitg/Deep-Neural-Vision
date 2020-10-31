@@ -12,7 +12,7 @@ from random import seed, choice, sample
 
 
 def create_input_files(dataset, karpathy_json_path, image_folder, captions_per_image, min_word_freq, output_folder,
-                       max_len=100):
+                       max_len=100, needOutdoor = False):
     """
     Creates input files for training, validation, and test data.
 
@@ -39,7 +39,11 @@ def create_input_files(dataset, karpathy_json_path, image_folder, captions_per_i
     test_image_paths = []
     test_image_captions = []
     word_freq = Counter()
-
+    test_img_path = Counter()
+    
+    with open('all_outdoor.txt') as f:
+          outdoorImages = json.load(f)
+      
     for img in data['images']:
         captions = []
         for c in img['sentences']:
@@ -54,6 +58,12 @@ def create_input_files(dataset, karpathy_json_path, image_folder, captions_per_i
         path = os.path.join(image_folder, img['filepath'], img['filename']) if dataset == 'coco' else os.path.join(
             image_folder, img['filename'])
 
+        if needOutdoor == True and (img['filename'] not in outdoorImages):
+            # print(img['filename'])
+            # print(f'{needOutdoor}, the image is not outdoor')
+            continue
+         
+        
         if img['split'] in {'train', 'restval'}:
             train_image_paths.append(path)
             train_image_captions.append(captions)
@@ -63,8 +73,20 @@ def create_input_files(dataset, karpathy_json_path, image_folder, captions_per_i
         elif img['split'] in {'test'}:
             test_image_paths.append(path)
             test_image_captions.append(captions)
+            test_img_path[img['filepath']] += 1
+    
+#     print(test_img_path)    
+#     return
 
     # Sanity check
+    print('Train images: ', len(train_image_paths))
+    print('Val images: ', len(val_image_paths))
+    print('Tst images: ', len(test_image_paths))
+    
+    if needOutdoor:
+        train_image_paths = train_image_paths[0:15000]
+        train_image_captions = train_image_captions[0:15000]
+    
     assert len(train_image_paths) == len(train_image_captions)
     assert len(val_image_paths) == len(val_image_captions)
     assert len(test_image_paths) == len(test_image_captions)
@@ -118,7 +140,7 @@ def create_input_files(dataset, karpathy_json_path, image_folder, captions_per_i
                 if len(img.shape) == 2:
                     img = img[:, :, np.newaxis]
                     img = np.concatenate([img, img, img], axis=2)
-                img = resize(img, (256, 256))
+                img = resize(img, (256, 256), preserve_range=True) # preserves range 0-255, but returns float now..)
                 img = img.transpose(2, 0, 1)
                 assert img.shape == (3, 256, 256)
                 assert np.max(img) <= 255
