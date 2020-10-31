@@ -13,6 +13,10 @@ import skimage
 from skimage.transform import resize
 import skimage
 from PIL import Image
+fig_size = plt.rcParams["figure.figsize"]
+fig_size[0] = 15
+fig_size[1] = 10
+plt.rcParams["figure.figsize"] = fig_size
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -170,11 +174,12 @@ def visualize_att(image_path, seq, alphas, rev_word_map, smooth=True):
     :param smooth: smooth weights?
     """
     image = Image.open(image_path)
-    image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
+    # image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
+    image = image.resize([512, 512], Image.LANCZOS)
     plt.imshow(image)
 
     words = [rev_word_map[ind] for ind in seq]
-    print('a', words)
+    # print('a', words)
     for t in range(len(words)):
         if t > 50:
             break
@@ -186,7 +191,8 @@ def visualize_att(image_path, seq, alphas, rev_word_map, smooth=True):
         if smooth:
             alpha = skimage.transform.pyramid_expand(current_alpha.numpy(), upscale=24, sigma=8)
         else:
-            alpha = skimage.transform.resize(current_alpha.numpy(), [14 * 24, 14 * 24])
+            # alpha = skimage.transform.resize(current_alpha.numpy(), [14 * 24, 14 * 24])
+            alpha = skimage.transform.resize(current_alpha.numpy(), [512, 512])
         if t == 0:
             plt.imshow(alpha, alpha=0)
         else:
