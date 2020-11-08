@@ -11,11 +11,12 @@ from utils import *
 from nltk.translate.bleu_score import corpus_bleu
 
 # Data parameters
-data_folder = '../outdoor_output'  # folder with data files saved by create_input_files.py
+data_folder = '../outdoor_output_full'  # folder with data files saved by create_input_files.py
 data_name = 'coco_5_cap_per_img_5_min_word_freq'  # base name shared by data files
+checkpoint_folder_name = 'full_data_pretained_embedding_11_7'
 
 # Model parameters
-emb_dim = 512  # dimension of word embeddings
+emb_dim = 100  # dimension of word embeddings
 attention_dim = 512  # dimension of attention linear layers
 decoder_dim = 512  # dimension of decoder RNN
 dropout = 0.5
@@ -24,7 +25,7 @@ cudnn.benchmark = True  # set to true only if inputs to model are fixed size; ot
 
 # Training parameters
 start_epoch = 0
-epochs = 20  # number of epochs to train for (if early stopping is not triggered)
+epochs = 10  # number of epochs to train for (if early stopping is not triggered)
 epochs_since_improvement = 0  # keeps track of number of epochs since there's been an improvement in validation BLEU
 batch_size = 80
 workers = 1  # for data-loading; right now, only 1 works with h5py
@@ -36,7 +37,7 @@ best_bleu4 = 0.  # BLEU-4 score right now
 print_freq = 10  # print training/validation stats every __ batches
 fine_tune_encoder = False  # fine-tune encoder?
 checkpoint = None  # path to checkpoint, None if none
-
+pretrained_embeddings = True
 
 def main():
     """
@@ -57,6 +58,9 @@ def main():
                                        decoder_dim=decoder_dim,
                                        vocab_size=len(word_map),
                                        dropout=dropout)
+        if pretrained_embeddings == True:
+            load_embeddings(decoder)
+            
         decoder_optimizer = torch.optim.Adam(params=filter(lambda p: p.requires_grad, decoder.parameters()),
                                              lr=decoder_lr)
         encoder = Encoder()
@@ -101,7 +105,7 @@ def main():
         # Decay learning rate if there is no improvement for 8 consecutive epochs, and terminate training after 20
         if epochs_since_improvement == 20:
             break
-        if epochs_since_improvement > 0 and epochs_since_improvement % 8 == 0:
+        if epochs_since_improvement > 0 and epochs_since_improvement % 2 == 0:
             adjust_learning_rate(decoder_optimizer, 0.8)
             if fine_tune_encoder:
                 adjust_learning_rate(encoder_optimizer, 0.8)
@@ -131,10 +135,47 @@ def main():
             epochs_since_improvement = 0
 
         # Save checkpoint
-        save_checkpoint(data_name, epoch, epochs_since_improvement, encoder, decoder, encoder_optimizer,
+        save_checkpoint(checkpoint_folder_name, data_name, epoch, epochs_since_improvement, encoder, decoder, encoder_optimizer,
                         decoder_optimizer, recent_bleu4, is_best)
 
 
+def load_embeddings(decoder):
+    # Create embedding_matrix and pickle dump...###
+    path_to_glove_file = "/data/word_embedding/glove.6B.100d.txt"
+
+    embeddings_index = {}
+    with open(path_to_glove_file) as f:
+        for line in f:
+            word, coefs = line.split(maxsplit=1)
+            coefs = np.fromstring(coefs, np.double, sep=" ")
+            embeddings_index[word] = coefs.astype(np.double)
+
+    print("Found %s word vectors." % len(embeddings_index))
+    num_tokens = len(word_map)
+    embedding_dim = 100
+    hits = 0
+    misses = 0
+
+    # Prepare embedding matrix
+    embedding_matrix = np.zeros((num_tokens, embedding_dim))
+    for word, i in word_map.items():
+        embedding_vector = embeddings_index.get(word)
+        if embedding_vector is not None:
+            # Words not found in embedding index will be all-zeros.
+            # This includes the representation for "padding" and "OOV"
+            embedding_matrix[i] = embedding_vector
+            hits += 1
+        else:
+            misses += 1
+            embedding_matrix[i] = np.random.uniform(-1, 1, embedding_dim).astype(np.double)
+    print("Converted %d words (%d misses)" % (hits, misses))
+    ###############################################################
+    print('loading embeddings')
+    decoder.load_pretrained_embeddings(torch.from_numpy(embedding_matrix).float())
+    decoder.fine_tune_embeddings(True) 
+    print('loaded embeddings')
+        
+        
 def train(train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_optimizer, epoch):
     """
     Performs one epoch's training.

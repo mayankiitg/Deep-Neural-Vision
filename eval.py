@@ -17,9 +17,9 @@ print('loaded nlgeval..')
 data_folder = '../outdoor_output'  # folder with data files saved by create_input_files.py
 data_name = 'coco_5_cap_per_img_5_min_word_freq'  # base name shared by data files
 # checkpoint = 'checkpoints/BEST_checkpoint_coco_5_cap_per_img_5_min_word_freq.pth.tar'  # model checkpoint
-checkpoint='/data/code/pretrained_coco.tar'
-# word_map_file = '../outdoor_output/WORDMAP_coco_5_cap_per_img_5_min_word_freq.json'  # word map, ensure it's the same the data was encoded with and the model was trained with
-word_map_file = '/data/code/WORDMAP_pretrained_coco.json'
+checkpoint='BEST_checkpoint_encoder_finetune_coco_5_cap_per_img_5_min_word_freq.pth.tar'
+word_map_file = '../outdoor_output/WORDMAP_coco_5_cap_per_img_5_min_word_freq.json'  # word map, ensure it's the same the data was encoded with and the model was trained with
+# word_map_file = '/data/code/WORDMAP_pretrained_coco.json'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # sets device for model and PyTorch tensors
 cudnn.benchmark = True  # set to true only if inputs to model are fixed size; otherwise lot of computational overhead
 
@@ -42,8 +42,12 @@ vocab_size = len(word_map)
 normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])
 
-
-
+torch.manual_seed(17)
+min_sigma = 0.000001 #0.000001
+max_sigma = 6 #3
+blur = transforms.GaussianBlur(5, sigma=(min_sigma, max_sigma))
+dataset = 'TEST'
+toblur = True
 
 def evaluate(beam_size):
     """
@@ -52,10 +56,17 @@ def evaluate(beam_size):
     :param beam_size: beam size at which to generate captions for evaluation
     :return: BLEU-4 score
     """
-    # DataLoader
-    loader = torch.utils.data.DataLoader(
-        CaptionDataset(data_folder, data_name, 'TEST', transform=transforms.Compose([normalize])),
-        batch_size=1, shuffle=True, num_workers=1, pin_memory=True)
+    print('min sigma', min_sigma)
+    print('max sigma', max_sigma)
+    if toblur == False:
+        # DataLoader
+        loader = torch.utils.data.DataLoader(
+            CaptionDataset(data_folder, data_name, dataset, transform=transforms.Compose([normalize])),
+            batch_size=1, shuffle=True, num_workers=1, pin_memory=True)
+    else:
+        loader = torch.utils.data.DataLoader(
+            CaptionDataset(data_folder, data_name, dataset, transform=transforms.Compose([normalize, blur])),
+            batch_size=1, shuffle=True, num_workers=1, pin_memory=True)        
 
     # TODO: Batched Beam Search
     # Therefore, do not use a batch_size greater than 1 - IMPORTANT!

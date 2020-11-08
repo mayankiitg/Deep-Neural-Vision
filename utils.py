@@ -84,8 +84,9 @@ def create_input_files(dataset, karpathy_json_path, image_folder, captions_per_i
     print('Tst images: ', len(test_image_paths))
     
     if needOutdoor:
-        train_image_paths = train_image_paths[0:15000]
-        train_image_captions = train_image_captions[0:15000]
+#         train_image_paths = train_image_paths[0:15000]
+#         train_image_captions = train_image_captions[0:15000]
+        print('processing outdoor images')
     
     assert len(train_image_paths) == len(train_image_captions)
     assert len(val_image_paths) == len(val_image_captions)
@@ -229,8 +230,7 @@ def clip_gradient(optimizer, grad_clip):
                 param.grad.data.clamp_(-grad_clip, grad_clip)
 
 
-def save_checkpoint(data_name, epoch, epochs_since_improvement, encoder, decoder, encoder_optimizer, decoder_optimizer,
-                    bleu4, is_best):
+def save_checkpoint(checkpoint_folder_name, data_name, epoch, epochs_since_improvement, encoder, decoder, encoder_optimizer, decoder_optimizer, bleu4, is_best):
     """
     Saves model checkpoint.
 
@@ -251,11 +251,12 @@ def save_checkpoint(data_name, epoch, epochs_since_improvement, encoder, decoder
              'decoder': decoder,
              'encoder_optimizer': encoder_optimizer,
              'decoder_optimizer': decoder_optimizer}
-    filename = 'checkpoint_' + data_name + '.pth.tar'
+    filename = os.path.join(checkpoint_folder_name, 'checkpoint_' + data_name + '.pth.tar')
     torch.save(state, filename)
     # If this checkpoint is the best so far, store a copy so it doesn't get overwritten by a worse checkpoint
     if is_best:
-        torch.save(state, 'BEST_' + filename)
+        filename = os.path.join(checkpoint_folder_name, 'BEST_checkpoint_' + data_name + '.pth.tar')
+        torch.save(state, filename)
 
 
 class AverageMeter(object):
