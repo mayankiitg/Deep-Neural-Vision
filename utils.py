@@ -9,10 +9,10 @@ from skimage.transform import resize
 from tqdm import tqdm
 from collections import Counter
 from random import seed, choice, sample
-
+import torchvision.transforms as transforms
 
 def create_input_files(dataset, karpathy_json_path, image_folder, captions_per_image, min_word_freq, output_folder,
-                       max_len=100, needOutdoor = False):
+                       max_len=100, needOutdoor = True, toBlur=False, minSigma=1e-10, maxSigma=6):
     """
     Creates input files for training, validation, and test data.
 
@@ -62,7 +62,6 @@ def create_input_files(dataset, karpathy_json_path, image_folder, captions_per_i
             # print(img['filename'])
             # print(f'{needOutdoor}, the image is not outdoor')
             continue
-         
         
         if img['split'] in {'train', 'restval'}:
             train_image_paths.append(path)
@@ -81,7 +80,7 @@ def create_input_files(dataset, karpathy_json_path, image_folder, captions_per_i
     # Sanity check
     print('Train images: ', len(train_image_paths))
     print('Val images: ', len(val_image_paths))
-    print('Tst images: ', len(test_image_paths))
+    print('Test images: ', len(test_image_paths))
     
     if needOutdoor:
 #         train_image_paths = train_image_paths[0:15000]
@@ -145,7 +144,12 @@ def create_input_files(dataset, karpathy_json_path, image_folder, captions_per_i
                 img = img.transpose(2, 0, 1)
                 assert img.shape == (3, 256, 256)
                 assert np.max(img) <= 255
-
+                
+                transform = transforms.GaussianBlur(5, sigma=(minSigma, maxSigma))
+                if toBlur:
+                    print('TYPE', type(img))
+                    img = transform(img)
+                
                 # Save image to HDF5 file
                 images[i] = img
 

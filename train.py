@@ -11,12 +11,12 @@ from utils import *
 from nltk.translate.bleu_score import corpus_bleu
 
 # Data parameters
-data_folder = '../outdoor_output_full'  # folder with data files saved by create_input_files.py
+data_folder = '../data_outdoor_full_coco'  # folder with data files saved by create_input_files.py
 data_name = 'coco_5_cap_per_img_5_min_word_freq'  # base name shared by data files
-checkpoint_folder_name = 'full_data_pretained_embedding_11_7'
+checkpoint_folder_name = 'checkpoints/full_data_pretained_embedding_300'
 
 # Model parameters
-emb_dim = 100  # dimension of word embeddings
+emb_dim = 300  # dimension of word embeddings
 attention_dim = 512  # dimension of attention linear layers
 decoder_dim = 512  # dimension of decoder RNN
 dropout = 0.5
@@ -25,7 +25,7 @@ cudnn.benchmark = True  # set to true only if inputs to model are fixed size; ot
 
 # Training parameters
 start_epoch = 0
-epochs = 10  # number of epochs to train for (if early stopping is not triggered)
+epochs = 13  # number of epochs to train for (if early stopping is not triggered)
 epochs_since_improvement = 0  # keeps track of number of epochs since there's been an improvement in validation BLEU
 batch_size = 80
 workers = 1  # for data-loading; right now, only 1 works with h5py
@@ -38,6 +38,10 @@ print_freq = 10  # print training/validation stats every __ batches
 fine_tune_encoder = False  # fine-tune encoder?
 checkpoint = None  # path to checkpoint, None if none
 pretrained_embeddings = True
+toBlur = True #blur parameter
+minSigma = 0.000001 #blur parameter
+maxSigma = 6 #blur parameter
+self_critical_after = 0 #after which epoch do we start SCST?
 
 def main():
     """
@@ -93,11 +97,11 @@ def main():
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
     train_loader = torch.utils.data.DataLoader(
-        CaptionDataset(data_folder, data_name, 'TRAIN', transform=transforms.Compose([normalize])),
-        batch_size=batch_size, shuffle=True, num_workers=workers, pin_memory=True)
+            CaptionDataset(data_folder, data_name, 'TRAIN', transform=transforms.Compose([normalize])),
+            batch_size=batch_size, shuffle=True, num_workers=workers, pin_memory=True)
     val_loader = torch.utils.data.DataLoader(
-        CaptionDataset(data_folder, data_name, 'VAL', transform=transforms.Compose([normalize])),
-        batch_size=batch_size, shuffle=True, num_workers=workers, pin_memory=True)
+            CaptionDataset(data_folder, data_name, 'VAL', transform=transforms.Compose([normalize])),
+            batch_size=batch_size, shuffle=True, num_workers=workers, pin_memory=True)
 
     # Epochs
     for epoch in range(start_epoch, epochs):
@@ -141,7 +145,7 @@ def main():
 
 def load_embeddings(decoder):
     # Create embedding_matrix and pickle dump...###
-    path_to_glove_file = "/data/word_embedding/glove.6B.100d.txt"
+    path_to_glove_file = "/data/word_embedding/glove.6B.300d.txt"
 
     embeddings_index = {}
     with open(path_to_glove_file) as f:
@@ -152,12 +156,11 @@ def load_embeddings(decoder):
 
     print("Found %s word vectors." % len(embeddings_index))
     num_tokens = len(word_map)
-    embedding_dim = 100
     hits = 0
     misses = 0
 
     # Prepare embedding matrix
-    embedding_matrix = np.zeros((num_tokens, embedding_dim))
+    embedding_matrix = np.zeros((num_tokens, emb_dim))
     for word, i in word_map.items():
         embedding_vector = embeddings_index.get(word)
         if embedding_vector is not None:
@@ -167,7 +170,7 @@ def load_embeddings(decoder):
             hits += 1
         else:
             misses += 1
-            embedding_matrix[i] = np.random.uniform(-1, 1, embedding_dim).astype(np.double)
+            embedding_matrix[i] = np.random.uniform(-1, 1, emb_dim).astype(np.double)
     print("Converted %d words (%d misses)" % (hits, misses))
     ###############################################################
     print('loading embeddings')
