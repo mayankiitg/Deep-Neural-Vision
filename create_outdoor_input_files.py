@@ -7,6 +7,9 @@ if __name__ == '__main__':
                        image_folder='/data/dataset/coco/Images/',
                        captions_per_image=5,
                        min_word_freq=5,
-                       output_folder='../outdoor_output',
+                       output_folder='../data_outdoor_full_coco_blurred/min1e-10tomax6/',
                        max_len=50,
-                      needOutdoor= True)
+                      needOutdoor= True,
+                      toBlur=True,
+                      minSigma=1e-10,
+                      maxSigma=6)

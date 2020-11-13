@@ -1,0 +1,107 @@
+Parameters to watch: checkpoint_folder_name, emb_dim, attention_dim, decoder_dim, batch_size,
+fine_tune_encoder, training how many images are we taking
+
+Decoder Model No Pretrained Embedding:
+
+# Data parameters
+data_folder = '../outdoor_output_full'  # folder with data files saved by create_input_files.py
+data_name = 'coco_5_cap_per_img_5_min_word_freq'  # base name shared by data files
+checkpoint_folder_name = 'full_data_no_pretrained_embedding'
+
+# Model parameters
+emb_dim = 512  # dimension of word embeddings
+attention_dim = 512  # dimension of attention linear layers
+decoder_dim = 512  # dimension of decoder RNN
+dropout = 0.5
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # sets device for model and PyTorch tensors
+cudnn.benchmark = True  # set to true only if inputs to model are fixed size; otherwise lot of computational overhead
+
+# Training parameters
+start_epoch = 0
+epochs = 20  # number of epochs to train for (if early stopping is not triggered)
+epochs_since_improvement = 0  # keeps track of number of epochs since there's been an improvement in validation BLEU
+batch_size = 80
+workers = 1  # for data-loading; right now, only 1 works with h5py
+encoder_lr = 1e-4  # learning rate for encoder if fine-tuning
+decoder_lr = 4e-4  # learning rate for decoder
+grad_clip = 5.  # clip gradients at an absolute value of
+alpha_c = 1.  # regularization parameter for 'doubly stochastic attention', as in the paper
+best_bleu4 = 0.  # BLEU-4 score right now
+print_freq = 10  # print training/validation stats every __ batches
+fine_tune_encoder = False  # fine-tune encoder?
+checkpoint = None  # path to checkpoint, None if none
+pretrained_embeddings = False
+
+Decoder Model with Pretrained Glove Embeddings:
+# Data parameters
+data_folder = '../outdoor_output_full'  # folder with data files saved by create_input_files.py
+data_name = 'coco_5_cap_per_img_5_min_word_freq'  # base name shared by data files
+checkpoint_folder_name = 'full_data_pretained_embedding_11_7'
+
+# Model parameters
+emb_dim = 100  # dimension of word embeddings
+attention_dim = 512  # dimension of attention linear layers
+decoder_dim = 512  # dimension of decoder RNN
+dropout = 0.5
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # sets device for model and PyTorch tensors
+cudnn.benchmark = True  # set to true only if inputs to model are fixed size; otherwise lot of computational overhead
+
+# Training parameters
+start_epoch = 0
+epochs = 10  # number of epochs to train for (if early stopping is not triggered)
+epochs_since_improvement = 0  # keeps track of number of epochs since there's been an improvement in validation BLEU
+batch_size = 80
+workers = 1  # for data-loading; right now, only 1 works with h5py
+encoder_lr = 1e-4  # learning rate for encoder if fine-tuning
+decoder_lr = 4e-4  # learning rate for decoder
+grad_clip = 5.  # clip gradients at an absolute value of
+alpha_c = 1.  # regularization parameter for 'doubly stochastic attention', as in the paper
+best_bleu4 = 0.  # BLEU-4 score right now
+print_freq = 10  # print training/validation stats every __ batches
+fine_tune_encoder = False  # fine-tune encoder?
+checkpoint = None  # path to checkpoint, None if none
+pretrained_embeddings = True
+
+Eval.py, Encoder finetuning no glove embedding:
+
+nlgeval = NLGEval(no_skipthoughts=True, no_glove=True)  # loads the models
+print('loaded nlgeval..')
+
+# Parameters
+data_folder = '../outdoor_output'  # folder with data files saved by create_input_files.py
+data_name = 'coco_5_cap_per_img_5_min_word_freq'  # base name shared by data files
+# checkpoint = 'checkpoints/BEST_checkpoint_coco_5_cap_per_img_5_min_word_freq.pth.tar'  # model checkpoint
+# checkpoint = 'BEST_checkpoint_encoder_finetune_coco_5_cap_per_img_5_min_word_freq.pth.tar'
+checkpoint='BEST_checkpoint_encoder_finetune_coco_5_cap_per_img_5_min_word_freq.pth.tar'
+word_map_file = '../outdoor_output/WORDMAP_coco_5_cap_per_img_5_min_word_freq.json'  # word map, ensure it's the same the data was encoded with and the model was trained with
+# word_map_file = '/data/code/WORDMAP_pretrained_coco.json'
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # sets device for model and PyTorch tensors
+cudnn.benchmark = True  # set to true only if inputs to model are fixed size; otherwise lot of computational overhead
+
+# Load model
+checkpoint = torch.load(checkpoint)
+decoder = checkpoint['decoder']
+decoder = decoder.to(device)
+decoder.eval()
+encoder = checkpoint['encoder']
+encoder = encoder.to(device)
+encoder.eval()
+
+# Load word map (word2ix)
+with open(word_map_file, 'r') as j:
+    word_map = json.load(j)
+rev_word_map = {v: k for k, v in word_map.items()}
+vocab_size = len(word_map)
+
+# Normalization transform
+normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
+
+torch.manual_seed(17) #we fix the test set blurring this way
+
+#Currently testing on (0.000001, 3) (3, 6) and (0.000001, 6)
+min_sigma = 3 #0.000001
+max_sigma = 6 #3
+blur = transforms.GaussianBlur(5, sigma=(min_sigma, max_sigma))
+dataset = 'TEST'
+toblur = True
