@@ -16,7 +16,7 @@ print('loaded nlgeval..')
 # Parameters
 data_folder = '../data_outdoor_full_coco'  # folder with data files saved by create_input_files.py
 data_name = 'coco_5_cap_per_img_5_min_word_freq'  # base name shared by data files
-checkpoint='checkpoints/full_data_pretained_embedding_11_7/BEST_checkpoint_coco_5_cap_per_img_5_min_word_freq.pth.tar'
+checkpoint='checkpoints/full_data_pretained_embedding_300/BEST_checkpoint_coco_5_cap_per_img_5_min_word_freq.pth.tar'
 word_map_file = f'{data_folder}/WORDMAP_{data_name}.json'  # word map, ensure it's the same the data was encoded with and the model was trained with
 # word_map_file = '/data/code/WORDMAP_pretrained_coco.json'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # sets device for model and PyTorch tensors
@@ -44,9 +44,10 @@ normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
 #Currently testing on (0.000001, 3) (3, 6) and (0.000001, 6)
 min_sigma = 1e-10 #0.000001
 max_sigma = 6 #3
-blur = transforms.GaussianBlur(5, sigma=(min_sigma, max_sigma))
+#blur = transforms.GaussianBlur(5, sigma=(min_sigma, max_sigma))
 dataset = 'TEST'
-toblur = False
+toblur = True
+data_folder_blur = '../data_outdoor_full_coco_blurred/min1e-10tomax6'
 
 def evaluate(beam_size):
     """
@@ -64,7 +65,7 @@ def evaluate(beam_size):
             batch_size=1, shuffle=True, num_workers=1, pin_memory=True)
     else:
         loader = torch.utils.data.DataLoader(
-            CaptionDataset(data_folder, data_name, dataset, transform=transforms.Compose([normalize, blur])),
+            CaptionDataset(data_folder_blur, data_name, dataset, transform=transforms.Compose([normalize])),
             batch_size=1, shuffle=True, num_workers=1, pin_memory=True)        
 
     # TODO: Batched Beam Search
@@ -220,5 +221,5 @@ def getSingleSentence(s):
 
 
 if __name__ == '__main__':
-    for beam_size in [1, 3, 5]:
+    for beam_size in [1, 3, 5, 10]:
         print("\nBLEU-4 score @ beam size of %d is %.4f." % (beam_size, evaluate(beam_size)))

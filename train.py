@@ -9,14 +9,15 @@ from models import Encoder, DecoderWithAttention
 from datasets import *
 from utils import *
 from nltk.translate.bleu_score import corpus_bleu
+# from torch.utils.tensorboard import SummaryWriter
 
 # Data parameters
 data_folder = '../data_outdoor_full_coco'  # folder with data files saved by create_input_files.py
 data_name = 'coco_5_cap_per_img_5_min_word_freq'  # base name shared by data files
-checkpoint_folder_name = 'checkpoints/full_data_pretained_embedding_300'
+checkpoint_folder_name = 'checkpoints/full_milestone_decoder_beam'
 
 # Model parameters
-emb_dim = 300  # dimension of word embeddings
+emb_dim = 512  # dimension of word embeddings
 attention_dim = 512  # dimension of attention linear layers
 decoder_dim = 512  # dimension of decoder RNN
 dropout = 0.5
@@ -25,7 +26,7 @@ cudnn.benchmark = True  # set to true only if inputs to model are fixed size; ot
 
 # Training parameters
 start_epoch = 0
-epochs = 13  # number of epochs to train for (if early stopping is not triggered)
+epochs = 14  # number of epochs to train for (if early stopping is not triggered)
 epochs_since_improvement = 0  # keeps track of number of epochs since there's been an improvement in validation BLEU
 batch_size = 80
 workers = 1  # for data-loading; right now, only 1 works with h5py
@@ -37,11 +38,15 @@ best_bleu4 = 0.  # BLEU-4 score right now
 print_freq = 10  # print training/validation stats every __ batches
 fine_tune_encoder = False  # fine-tune encoder?
 checkpoint = None  # path to checkpoint, None if none
-pretrained_embeddings = True
-toBlur = True #blur parameter
-minSigma = 0.000001 #blur parameter
-maxSigma = 6 #blur parameter
-self_critical_after = 0 #after which epoch do we start SCST?
+pretrained_embeddings = False
+adaptive_learning = True
+
+## Schedules sampling###
+scheduled_sampling_start = 50
+scheduled_sampling_increase_every = 4
+scheduled_sampling_max_prob = 0.25
+scheduled_sampling_increase_prob = 0.08
+###
 
 def main():
     """
@@ -106,10 +111,10 @@ def main():
     # Epochs
     for epoch in range(start_epoch, epochs):
 
-        # Decay learning rate if there is no improvement for 8 consecutive epochs, and terminate training after 20
+        # Decay learning rate if there is no improvement for 2 consecutive epochs, and terminate training after 20
         if epochs_since_improvement == 20:
             break
-        if epochs_since_improvement > 0 and epochs_since_improvement % 2 == 0:
+        if adaptive_learning and epochs_since_improvement > 0 and epochs_since_improvement % 2 == 0:
             adjust_learning_rate(decoder_optimizer, 0.8)
             if fine_tune_encoder:
                 adjust_learning_rate(encoder_optimizer, 0.8)
@@ -201,6 +206,11 @@ def train(train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_
     top5accs = AverageMeter()  # top5 accuracy
 
     start = time.time()
+    
+    ssprob = 0
+    if epoch >= scheduled_sampling_start and scheduled_sampling_start >= 0:
+        frac = (epoch - scheduled_sampling_start) // scheduled_sampling_increase_every
+        ssprob = min(scheduled_sampling_increase_prob  * frac, scheduled_sampling_max_prob)
 
     # Batches
     for i, (imgs, caps, caplens) in enumerate(train_loader):
@@ -213,7 +223,7 @@ def train(train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_
 
         # Forward prop.
         imgs = encoder(imgs)
-        scores, caps_sorted, decode_lengths, alphas, sort_ind = decoder(imgs, caps, caplens)
+        scores, caps_sorted, decode_lengths, alphas, sort_ind = decoder(imgs, caps, caplens, ssprob = ssprob)
 
         # Since we decoded starting with <start>, the targets are all words after <start>, up to <end>
         targets = caps_sorted[:, 1:]
@@ -257,13 +267,15 @@ def train(train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_
         # Print status
         if i % print_freq == 0:
             print('Epoch: [{0}][{1}/{2}]\t'
+                  'ssprob: {3} '
                   'Batch Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data Load Time {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Top-5 Accuracy {top5.val:.3f} ({top5.avg:.3f})'.format(epoch, i, len(train_loader),
-                                                                          batch_time=batch_time,
-                                                                          data_time=data_time, loss=losses,
-                                                                          top5=top5accs))
+                  'Top-5 Accuracy {top5.val:.3f} ({top5.avg:.3f})'
+                   .format(epoch, i, len(train_loader), ssprob,
+                                      batch_time=batch_time,
+                                      data_time=data_time, loss=losses,
+                                      top5=top5accs))
 
 
 def validate(val_loader, encoder, decoder, criterion):
