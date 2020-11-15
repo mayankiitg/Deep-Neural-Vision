@@ -147,8 +147,10 @@ def create_input_files(dataset, karpathy_json_path, image_folder, captions_per_i
                 
                 transform = transforms.GaussianBlur(5, sigma=(minSigma, maxSigma))
                 if toBlur:
-                    print('TYPE', type(img))
+                    #print('TYPE', type(img))
+                    img = torch.FloatTensor(img)
                     img = transform(img)
+                    img = img.numpy()
                 
                 # Save image to HDF5 file
                 images[i] = img

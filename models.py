@@ -158,7 +158,7 @@ class DecoderWithAttention(nn.Module):
         c = self.init_c(mean_encoder_out)
         return h, c
 
-    def forward(self, encoder_out, encoded_captions, caption_lengths):
+    def forward(self, encoder_out, encoded_captions, caption_lengths, ssprob=0):
         """
         Forward propagation.
 
@@ -204,11 +204,39 @@ class DecoderWithAttention(nn.Module):
                                                                 h[:batch_size_t])
             gate = self.sigmoid(self.f_beta(h[:batch_size_t]))  # gating scalar, (batch_size_t, encoder_dim)
             attention_weighted_encoding = gate * attention_weighted_encoding
+            #LSTMCell (input_tensor, (hidden state tensor, cell state tensor))
+            ground_truth_words = encoded_captions[:batch_size_t, t]  # (batch_size, max_caption_length)
+            input_words = ground_truth_words.clone()
+#             print('batch_t: ', batch_size_t)
+#             print('ground truth words size', ground_truth_words.shape)
+#             print('encoded captions size', encoded_captions.shape)
+
+            if ssprob > 0 and t!=0:
+                sample_prob = torch.FloatTensor(batch_size_t, 1).uniform_(0, 1).to(device)
+                sample_mask = sample_prob < ssprob #[0, 1, 0, 0,...] of shape (batch_size_t)
+#                 print ('sample_prob, sample_mask', sample_prob.shape, sample_mask.shape)
+#                 print ('sample_prob, sample_mask', sample_prob, sample_mask)
+           
+                sample_ind = torch.nonzero(sample_mask)[:, 0] #non-zero indices from sample_mask.
+            
+#                 print('sample_ind', sample_ind.shape, sample_ind)
+                
+                #(batch_size_t, vocab_size). probabilities for word t-1 for each caption in batch
+                prob_prev = torch.exp(predictions[:batch_size_t, t-1, :].detach())
+                #every word represented by index of word in vocab
+                ss_words = torch.multinomial(prob_prev, 1).view(-1).index_select(0, sample_ind) 
+                input_words.index_copy_(0, sample_ind, ss_words)
+#                 print('ss_words shape', ss_words.shape)
+#                 print('groundtruth, mask, input_words',ground_truth_words,  sample_mask, input_words)
+                
+#             print('input words embedding', self.embedding(input_words))
+#             print('older shape, new shape', embeddings[:batch_size_t, t, :].shape, self.embedding(input_words).shape)
             h, c = self.decode_step(
-                torch.cat([embeddings[:batch_size_t, t, :], attention_weighted_encoding], dim=1),
+                torch.cat([self.embedding(input_words), attention_weighted_encoding], dim=1),
                 (h[:batch_size_t], c[:batch_size_t]))  # (batch_size_t, decoder_dim)
             preds = self.fc(self.dropout(h))  # (batch_size_t, vocab_size)
+#             print('preds', preds.shape, preds)
             predictions[:batch_size_t, t, :] = preds
             alphas[:batch_size_t, t, :] = alpha
-
+            
         return predictions, encoded_captions, decode_lengths, alphas, sort_ind
