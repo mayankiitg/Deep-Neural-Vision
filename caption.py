@@ -202,7 +202,7 @@ def visualize_att(image_path, seq, alphas, rev_word_map, smooth=True):
     plt.show()
 
 
-def getCaptions(img = '/data/dataset/flickr-8k/Flickr_Data/Flickr_Data/Images/1204996216_71d7519d9a.jpg', word_map_file = '../output/WORDMAP_flickr8k_5_cap_per_img_5_min_word_freq.json', model = 'BEST_checkpoint_flickr8k_5_cap_per_img_5_min_word_freq.pth.tar'):
+def getCaptions(img, word_map_file, model):
     
     smooth = False
     beam_size = 3
